@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import List, Dict, Optional, Any
 
 import networkx as nx
+import pydot as pydot
 
 from .conditions import Condition, DefaultCondition
 from .errors import InvalidGraphState
@@ -87,13 +88,11 @@ class RootedDirectedGraph:
             self._check_and_set_root(source)
 
         # assert no more than 1 edge exist with DefaultEdge
-        # TODO Optimize
         if isinstance(condition, DefaultCondition):
             if source in self._graph:
-                for neighbor, neighbor_dict in self._graph.adj[source].items():
-                    for _, e in neighbor_dict.items():
-                        if 'condition' in e and isinstance(e['condition'], DefaultCondition):
-                            raise InvalidGraphState("vertex already contains a defaulted path")
+                if len(self._graph.adj[source]):
+                    raise InvalidGraphState("vertex already contains a defaulted path")
+
         self._graph.add_edge(source, destination, condition=condition, label=str(condition))
 
     @property
@@ -113,6 +112,11 @@ class RootedDirectedGraph:
 
         return adjacent
 
+    def write_dot_file(self, output: str = 'graph.dot'):
+        dot: pydot.Dot = nx.drawing.nx_pydot.to_pydot(self._graph)
+        with open(output, "wb") as f:
+            f.write(dot.create_dot())  # type: ignore
+
 
 @dataclass
 class LinkedData:
@@ -125,7 +129,6 @@ class BFSIterator:
     def __init__(self, g: RootedDirectedGraph, context: Optional[Dict] = None):
         self._graph = g
         self._context = {} if context is None else context
-        self._history: Optional[LinkedData] = None
         self.visited = set()
 
     def __iter__(self):
@@ -155,11 +158,14 @@ class BFSIterator:
 
 
 class PrompterIterator:
-    def __init__(self, g: RootedDirectedGraph, input_mapping: Dict[Identifier, InputT], context: Optional[Dict] = None):
+    def __init__(self, g: RootedDirectedGraph, input_mapping: Dict[Identifier, InputT] = None,
+                 context: Optional[Dict] = None):
         if context is None:
             context = {}
         self._context = context
         self._graph = g
+        if input_mapping is None:
+            input_mapping = {}
         self._input_mapping = input_mapping
 
     def __iter__(self):
@@ -167,6 +173,7 @@ class PrompterIterator:
             raise InvalidGraphState("no root exists")
         self.current_vertex = self._graph.root
         self.previous_vertex: Optional[Vertex] = None
+        self._history: Optional[LinkedData] = None
         return self
 
     def __next__(self):
@@ -181,7 +188,7 @@ class PrompterIterator:
                 raise StopIteration
 
         self.previous_vertex = self.current_vertex
-        # self._append_history(self.)
+        self._append_history(self.current_vertex)
         return Prompter(self.current_vertex, self._context, self._input_mapping)
 
     def _append_history(self, current):
@@ -216,16 +223,18 @@ def find_path(value: InputT, vertices: List[RootedDirectedGraph.AdjacentVertex])
 class Prompter:
     vertex: Vertex
     context: Dict
-    input_mapping: Dict[Identifier, InputT]
+    input_mapping: Optional[Dict[Identifier, InputT]]
 
-    def prompt(self):
+    def prompt(self) -> InputT:
         # check context
         context_supplied_val = self._context_supplied(self.vertex.identifier)
         if context_supplied_val is not None:
             gathered_input = context_supplied_val
         else:
             gathered_input = read_user_variable(self.vertex.prompt)
-        self.input_mapping[self.vertex.identifier] = gathered_input
+        if self.input_mapping is not None:
+            self.input_mapping[self.vertex.identifier] = gathered_input
+        return gathered_input
 
     def _context_supplied(self, identifier: Identifier) -> Optional[InputT]:
         # check context
