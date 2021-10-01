@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from enum import Enum, unique
-from typing import Dict, Any, Callable, Optional
+from typing import Dict, Any, Callable, Optional, Union, List
 
-from errors import questionnairerror
+from .errors import QuestionnaireError
 
 
 class Condition(ABC):
     @abstractmethod
-    def evaluate(self, input_data: str) -> bool:
+    def evaluate(self, input_data: Union[int, float, str, List[Union[int, float, str]]]) -> bool:
         pass
 
     @classmethod
@@ -58,7 +58,7 @@ class ComparisonCondition(Condition):
         @classmethod
         def from_str(cls, operator: str) -> ComparisonCondition.Operator:
             if operator not in cls._str_repr():
-                raise questionnairerror(f'no such operator for `{operator}` ')
+                raise QuestionnaireError(f'no such operator for `{operator}` ')
             return cls._str_repr()[operator]
 
         def __str__(self) -> str:
@@ -104,7 +104,7 @@ class ConditionFactory:
     @staticmethod
     def get(kind: str, data: Optional[Dict] = None) -> Condition:
         if kind not in ConditionFactory.BUILDER_FNS:
-            raise questionnairerror(f'no builder found for condition kind `{kind}`')
+            raise QuestionnaireError(f'no builder found for condition kind `{kind}`')
 
         return ConditionFactory.BUILDER_FNS[kind](data)
 

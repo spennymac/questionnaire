@@ -1,8 +1,8 @@
-class questionnairerror(Exception):
+class QuestionnaireError(Exception):
     pass
 
 
-class InvalidGraphState(questionnairerror):
+class InvalidGraphState(QuestionnaireError):
     def __init__(self, message):
         self.message = message
 
